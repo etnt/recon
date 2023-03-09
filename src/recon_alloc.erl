@@ -139,6 +139,7 @@
 -export([memory/1, memory/2, fragmentation/1, cache_hit_rates/0,
          average_block_sizes/1, sbcs_to_mbcs/1, allocators/0,
          allocators/1]).
+-export([fragmentation_p/1, fragmentation_p/2]).
 
 %% Snapshot handling
 -type memory() :: [{atom(),atom()}].
@@ -254,6 +255,40 @@ fragmentation(Keyword) ->
       {Weight, {Allocator,N}, Vals}
     end || {{Allocator, N}, Props} <- util_alloc()],
     [{Key,Val} || {_W, Key, Val} <- lists:reverse(lists:sort(WeighedData))].
+
+fragmentation_p(Keyword) ->
+    fragmentation_p(Keyword, true).%-*-
+
+fragmentation_p(Keyword, FancyP) ->
+    Sort = fun({{AllocA,NoA},_}, {{AllocB,NoB},_}) when AllocA == AllocB ->
+                   NoA < NoB;
+              ({{AllocA,_},_}, {{AllocB,_},_}) when AllocA =/= AllocB ->
+                   AllocA < AllocB
+           end,
+    L = lists:sort(Sort, fragmentation(Keyword)),
+    lists:foldl(
+      fun({Key,Vs}, Acc) ->
+              S = [begin
+                       Width = width(FancyP,K),
+                       FmtStr = fmtstr(FancyP,V,Width),
+                       io_lib:format("~p="++FmtStr,[K,V])
+                   end  || {K,V} <- Vs],
+              io:format("~p : ~s~n",[Key,S]),
+              Acc
+      end, ok, L).
+
+fmtstr(true, V,Width) when is_integer(V) -> "~-"++Width++".w ";
+fmtstr(true, V,Width) when is_float(V)   -> "~-"++Width++".4f ";
+fmtstr(false,_,_)                        -> "~p ".
+
+width(true,sbcs_usage)         -> "10";
+width(true,mbcs_usage)         -> "10";
+width(true,sbcs_block_size)    -> "15";
+width(true,sbcs_carriers_size) -> "15";
+width(true,mbcs_block_size)    -> "15";
+width(true,mbcs_carriers_size) -> "15";
+width(false,_)                 -> "".
+
 
 %% @doc looks at the `mseg_alloc' allocator (allocator used by all the
 %% allocators in {@link allocator()}) and returns information relative to
