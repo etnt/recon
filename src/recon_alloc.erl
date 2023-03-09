@@ -139,7 +139,9 @@
 -export([memory/1, memory/2, fragmentation/1, cache_hit_rates/0,
          average_block_sizes/1, sbcs_to_mbcs/1, allocators/0,
          allocators/1]).
--export([fragmentation_p/1, fragmentation_p/2]).
+-export([fragmentation_p/1
+        , fragmentation_p/2
+        , fragmentation_p/3]).
 
 %% Snapshot handling
 -type memory() :: [{atom(),atom()}].
@@ -257,9 +259,12 @@ fragmentation(Keyword) ->
     [{Key,Val} || {_W, Key, Val} <- lists:reverse(lists:sort(WeighedData))].
 
 fragmentation_p(Keyword) ->
-    fragmentation_p(Keyword, true).%-*-
+    fragmentation_p(Keyword, erlang:group_leader()).%-*-
 
-fragmentation_p(Keyword, FancyP) ->
+fragmentation_p(Keyword, Where) ->
+    fragmentation_p(Keyword, Where, true).
+
+fragmentation_p(Keyword, Where, FancyP) when is_pid(Where) ->
     Sort = fun({{AllocA,NoA},_}, {{AllocB,NoB},_}) when AllocA == AllocB ->
                    NoA < NoB;
               ({{AllocA,_},_}, {{AllocB,_},_}) when AllocA =/= AllocB ->
@@ -273,9 +278,22 @@ fragmentation_p(Keyword, FancyP) ->
                        FmtStr = fmtstr(FancyP,V,Width),
                        io_lib:format("~p="++FmtStr,[K,V])
                    end  || {K,V} <- Vs],
-              io:format("~p : ~s~n",[Key,S]),
+              io:format(Where, "~p : ~s~n",[Key,S]),
               Acc
-      end, ok, L).
+      end, ok, L);
+fragmentation_p(Keyword, Fname, FancyP) when is_list(Fname) ->
+    case file:open(Fname, [write]) of
+        {ok, Fd} ->
+            try
+                fragmentation_p(Keyword, Fd, FancyP)
+            after
+                file:close(Fd)
+            end;
+        Else ->
+            Else
+    end.
+
+
 
 fmtstr(true, V,Width) when is_integer(V) -> "~-"++Width++".w ";
 fmtstr(true, V,Width) when is_float(V)   -> "~-"++Width++".4f ";
